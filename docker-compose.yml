@@ -29,7 +29,7 @@ x-common: &common
   #
   # 也可以设环境变量 DSA_IMAGE 换用其它镜像源，例如：
   #   DSA_IMAGE=daily-stock-analysis-local:latest docker compose up -d
-  image: ${DSA_IMAGE:-smi1ezz/daily-stock-analysis:2.4.0}
+  image: ${DSA_IMAGE:-smi1ezz/daily-stock-analysis:26.10.0}
   # build:
   #   context: .
   #   dockerfile: docker/Dockerfile

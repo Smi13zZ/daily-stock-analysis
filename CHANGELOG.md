@@ -1,24 +1,5 @@
 # DSA 定制版 · 变更日志
 
-版本号格式 `MAJOR.MINOR.PATCH`（大版本 . 中等变动 . 小版本），按**从右往左**数位：
-
-| 变动级别 | 位 | 示例 | 触发场景 |
-| --- | --- | --- | --- |
-| 小版本 | 右数第一位（PATCH） | 2.0.1 → 2.0.2 | 文案、bug 修复、参数微调、小范围样式调整 |
-| 中等变动 | 右数第二位（MINOR） | 2.0.1 → 2.1.0 | 新增功能、交互/布局变化、新增配置项、新增导出能力 |
-| 大版本 | 右数第三位（MAJOR） | 2.1.0 → 3.0.0 | 架构调整、渲染/数据引擎更换、破坏性变更 |
-
-高位 +1 时其右侧低位全部归零。
-
-每次打包由 `tools/make_migration_package.py` 自动升级版本号并写回 `VERSION`：
-
-```bash
-python3 app/tools/make_migration_package.py                # 默认小版本 +1
-python3 app/tools/make_migration_package.py --bump minor   # 中等变动
-python3 app/tools/make_migration_package.py --bump major   # 大版本
-python3 app/tools/make_migration_package.py --note "改动摘要"   # 同时追加本条日志
-```
-
 ---
 
 ## v2.0.0（2026-10-07）
@@ -90,7 +71,16 @@ python3 app/tools/make_migration_package.py --note "改动摘要"   # 同时追�
   自此 **不再单独交付 `dsa-source` 源码包**，migration 系列为唯一交付物。
   安装说明新增「二·五、已在运行的机器升级」章节。
 
-## v2.4.0（2026-10-11）
+## 26.10.0（2026-10-14）
+
+> 首个公开发布版。功能基线为此前的 `2.4.0`；自本版起版本号改用 `年.月.序号` 格式（本版为 `26.10.0`）。
+
+### 分发与版本
+
+- **分发模型改为 Docker Hub 官方镜像**：`smi1ezz/daily-stock-analysis`，提供 **linux/amd64 + linux/arm64** 双架构，`docker compose pull` 自动匹配本机，安装无需本地构建。
+- **GitHub Actions 自动发版**：推送 `v*` tag 触发 buildx 构建双架构镜像并推送 Docker Hub（见 `.github/workflows/docker-publish.yml`）。
+- `docker-compose.yml` 默认拉取已发布镜像；`build:` 两行注释保留，需要源码构建时打开即可。
+- README 的安装 / 升级教程改为以 `docker compose pull` 为主。
 
 ### 新增
 - **分析报告分享方式可在系统设置分别勾选**：原先「PNG + Markdown + HTML 同时导出」是写死的

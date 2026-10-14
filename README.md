@@ -6,7 +6,7 @@
 
 [![Upstream](https://img.shields.io/badge/upstream-ZhuLinsen%2Fdaily__stock__analysis-blue)](https://github.com/ZhuLinsen/daily_stock_analysis)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
-[![Version](https://img.shields.io/badge/version-2.4.0-orange)](./VERSION)
+[![Version](https://img.shields.io/badge/version-26.10.0-orange)](./VERSION)
 
 </div>
 
@@ -33,7 +33,7 @@
 
 ## 🛠 一、我做了哪些改动
 
-> 完整逐版本日志见 [CHANGELOG.md](./CHANGELOG.md)。当前版本 **v2.4.0**。
+> 完整逐版本日志见 [CHANGELOG.md](./CHANGELOG.md)。当前版本 **26.10.0**。
 
 ### 改动总览
 
@@ -47,7 +47,7 @@
 | v2.2.1 | 工程 | 修复前端版本号注入（构建时从 `VERSION` 读取，网页不再显示 `development`） |
 | v2.3.0 | 通知 | 通知分段上限改为**界面可调**，保存即时生效、无需重启容器 |
 | v2.3.1 | 通知 · 部署 | Bark 推送失败原因可见；超物理上限自动钳制；迁移包自带一键升级脚本 |
-| v2.4.0 | 分享 | 报告分享方式拆成 **PNG / Markdown / HTML 三个独立开关** |
+| 26.10.0 | 分享 · 分发 | 报告分享拆成 **PNG / Markdown / HTML 三个独立开关**；分发模型改为 Docker Hub 镜像 + Actions 自动发版 |
 
 ### 按主题细看
 
@@ -56,7 +56,7 @@
 - **分享图渲染引擎换血**：把上游默认的 `wkhtmltoimage`（旧 WebKit）换成 **Playwright / Chromium**。旧引擎对现代 CSS 支持差、固定高度卡片会被 `overflow:hidden` 截断；新引擎渲染更准。Chromium 已烘焙进镜像（`PLAYWRIGHT_BROWSERS_PATH=/app/.playwright`），无需联网。
 - **分享图页脚去广告化**：去掉上游页脚里的 GitHub 仓库链接、小红书二维码/账号与底部免责声明，只保留标题与副标题 —— 适合作为纯粹的股票分析卡片直接转发。
 - **报告生成后自动导出分享产物**（`src/share_export.py`）：在普通分析链路、Agent 链路、大盘复盘的保存钩子上触发，后台线程渲染落盘，不拖慢分析。
-- **v2.4.0 三开关独立**：分享产物不再写死"PNG+MD+HTML 全导出"，而是拆成三个互不依赖的开关，可任意组合（只留图片也行）：
+- **三开关独立**：分享产物不再写死"PNG+MD+HTML 全导出"，而是拆成三个互不依赖的开关，可任意组合（只留图片也行）：
 
   | 开关 | 环境变量 | 默认 | 产物 |
   | --- | --- | --- | --- |
@@ -163,7 +163,7 @@ docker compose pull                 # 拉取最新镜像（latest 跟随最新�
 docker compose up -d --force-recreate
 ```
 
-> 想固定到某个版本，把 `docker-compose.yml` 的 `image:` 改成 `smi1ezz/daily-stock-analysis:<版本>`（如 `:2.4.0`）；想同步 compose / `.env.example` 的最新模板再补一句 `git pull`。
+> 想固定到某个版本，把 `docker-compose.yml` 的 `image:` 改成 `smi1ezz/daily-stock-analysis:<版本>`（如 `:26.10.0`）；想同步 compose / `.env.example` 的最新模板再补一句 `git pull`。
 
 ### 7. 可选：把「Web 服务」和「定时分析」拆成两个进程
 
