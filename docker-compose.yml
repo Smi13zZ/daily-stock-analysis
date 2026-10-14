@@ -1,9 +1,9 @@
 # ==============================================================================
-# daily_stock_analysis —— Docker Compose 部署文件（增强版 · 单文件源码构建版）
+# daily_stock_analysis —— Docker Compose 部署文件（增强版 · 镜像拉取版）
 # 项目地址: https://github.com/ZhuLinsen/daily_stock_analysis
 #
 # 放置位置：项目根目录（与 .env / docker/ 同级）
-# 启动命令：docker compose up -d
+# 启动命令：docker compose up -d   （首次会自动 pull 镜像）
 #
 # 默认拓扑（推荐，单一调度入口）：
 #   server   : FastAPI + Web 工作台，内置调度器负责每日定时分析并推送
@@ -12,9 +12,8 @@
 #              启用前必须把 .env 里的 SCHEDULE_ENABLED 设为 false，
 #              否则会重复推送（详见同目录下的部署教程）。
 #
-# 本文件为「单文件版」：把原 docker-compose.override.yml 的本地源码构建
-# 配置合并进了 x-common 锚点，与双文件版本行为完全一致。
-# 回滚到双文件版本：从备份目录恢复 docker-compose.override.yml 即可。
+# 本文件为「单文件版」：默认直接使用 Docker Hub 上已发布的镜像；
+# 需要本地源码构建时，把 x-common 里 build: 两行的注释打开即可（与 image 并存）。
 # ==============================================================================
 
 name: daily-stock-analysis
@@ -23,21 +22,18 @@ name: daily-stock-analysis
 # 公共服务片段（YAML 锚点，server / analyzer 共用）
 # ------------------------------------------------------------------------------
 x-common: &common
-  # 当前模式：本地源码构建（单文件版）
-  # 改动 src/ 源码后重新构建并重建容器：
+  # 默认直接使用 Docker Hub 上的镜像（首次 up 自动 pull；linux/amd64 + linux/arm64 双架构均支持）。
+  # 想从源码自行构建：取消下面 build 两行的注释，然后
   #   docker compose build && docker compose up -d --force-recreate
-  # 注意必须用独立本地 tag + pull_policy: never，否则 compose 的
-  # pull_policy: always 会在每次 up/run 把上游镜像拉回覆盖本地构建。
-  image: daily-stock-analysis-local:latest
-  pull_policy: never
-  build:
-    context: .
-    dockerfile: docker/Dockerfile
+  # （build 与 image 同时存在时，compose 会把构建结果打成 image 这个名字）
+  #
+  # 也可以设环境变量 DSA_IMAGE 换用其它镜像源，例如：
+  #   DSA_IMAGE=daily-stock-analysis-local:latest docker compose up -d
+  image: ${DSA_IMAGE:-smi1ezz/daily-stock-analysis:2.4.0}
+  # build:
+  #   context: .
+  #   dockerfile: docker/Dockerfile
 
-  # 如需切回官方预构建镜像（免构建、秒级启动），把上面 3 行改成：
-  #   image: ${DSA_IMAGE:-ghcr.io/zhulinsen/daily_stock_analysis:latest}
-  #   pull_policy: always
-  #   # （并删除上面的 build: 段）
   restart: unless-stopped
 
   # 从项目根目录的 .env 读取全部配置

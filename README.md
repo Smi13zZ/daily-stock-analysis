@@ -83,7 +83,8 @@
 
 #### 4️⃣ 工程 & 部署
 
-- **单文件 compose + 源码构建**：`docker-compose.yml` 合并为一个文件，固定本地 tag `daily-stock-analysis-local:latest` + `pull_policy: never`，避免 `up` 时被上游镜像覆盖本地构建。改完源码 `docker compose build && docker compose up -d --force-recreate` 即可。
+- **镜像分发 + 单文件 compose**：官方镜像发布在 Docker Hub（`smi1ezz/daily-stock-analysis`，linux/amd64 + linux/arm64 双架构），`docker-compose.yml` 合并为一个文件，默认直接拉取该镜像；想源码构建取消 `build:` 注释即可。
+- **GitHub Actions 自动发版**：推送 `v*` tag 会自动构建双架构镜像并推送到 Docker Hub（见 [`.github/workflows/docker-publish.yml`](./.github/workflows/docker-publish.yml)）。
 - **前端版本号自动同步**：`docker/Dockerfile` 构建时从根目录 `VERSION` 读取版本号，网页不再显示占位值 `development`。
 - **`share_image` → `share` 全链路改名**：目录 / 代码 / 路由 / 组件 / i18n 统一。
 - **修复 `entrypoint.sh` CRLF** 导致容器启动失败；仓库提供 [`.gitattributes`](./.gitattributes) 强制 LF，Windows 检出也不会再变成 CRLF。
@@ -96,8 +97,8 @@
 ### 0. 前置条件
 
 - **Docker 24+** 与 **docker compose v2**（`docker compose version` 可验证）
-- 建议 **4 GB 以上内存**（构建要打包前端 + 烘焙 Chromium；运行默认限 2G，可用 `MEM_LIMIT` 调整）
-- **构建阶段需要联网**（拉取 npm / pip 依赖与 Chromium）；镜像构建完成后运行可离线
+- 建议 **4 GB 以上内存**（运行默认限 2G，可用 `MEM_LIMIT` 调整）
+- **首次启动需要联网**：会自动从 Docker Hub 拉取镜像 `smi1ezz/daily-stock-analysis`（体积较大，请耐心等待）；拉取完成后即可离线运行
 
 ### 1. 获取代码
 
@@ -123,14 +124,16 @@ cp .env.example .env
 
 > ⚠️ 不要把 `.env` 作为单文件 volume 挂进容器 `/app/.env` —— 那会让设置页保存配置的原子写入失败。compose 已通过 `env_file` 读取它。
 
-### 3. 构建并启动
+### 3. 拉取镜像并启动
 
 ```bash
-docker compose build
+docker compose pull
 docker compose up -d
 ```
 
-首次构建会编译前端并烘焙 Chromium，耗时取决于网络。
+首次会从 Docker Hub 拉取 `smi1ezz/daily-stock-analysis`（linux/amd64 + linux/arm64 自动匹配），随后直接启动，无需本地构建。
+
+> 想从源码自行构建（改过代码 / 想跑未发布的分支）：在 `docker-compose.yml` 里取消 `build:` 两行的注释，然后 `docker compose build && docker compose up -d --force-recreate`。
 
 ### 4. 打开工作台
 
@@ -156,10 +159,11 @@ share/2026-10-14/贵州茅台-600519-20261014.html
 ### 6. 升级到新版本
 
 ```bash
-git pull
-docker compose build
+docker compose pull                 # 拉取最新镜像（latest 跟随最新发布版）
 docker compose up -d --force-recreate
 ```
+
+> 想固定到某个版本，把 `docker-compose.yml` 的 `image:` 改成 `smi1ezz/daily-stock-analysis:<版本>`（如 `:2.4.0`）；想同步 compose / `.env.example` 的最新模板再补一句 `git pull`。
 
 ### 7. 可选：把「Web 服务」和「定时分析」拆成两个进程
 
@@ -175,7 +179,8 @@ docker compose --profile scheduler up -d
 | 现象 | 排查 |
 | --- | --- |
 | 网页打不开 | `docker compose logs server` 看启动日志；确认 `API_PORT` 未被占用、防火墙已放通 |
-| 网页版本号显示 `development` | 用的是旧构建产物，重新 `docker compose build` 即可（v2.2.1 已修） |
+| 网页版本号显示 `development` | 用的是旧构建产物，重新 `docker compose build`（源码构建模式）或 `docker compose pull`（镜像模式）即可（v2.2.1 已修） |
+| `docker compose pull` 拉取失败 / 很慢 | 检查网络与 Docker 镜像加速配置；也可用环境变量 `DSA_IMAGE` 指定其它镜像源 |
 | Bark 推送失败 | 报告过长看是否触发分段；`CUSTOM_WEBHOOK_MAX_BYTES` 建议 `3000`；日志会打印响应体与请求体字节数 |
 | 容器启动即退出，报 `exec format error` 或脚本语法错 | `entrypoint.sh` 被改成 CRLF。本仓库 `.gitattributes` 已强制 LF；若你手动改过，请 `dos2unix docker/entrypoint.sh` |
 | 分享产物没生成 | 确认 `SHARE_AUTO_EXPORT=true`；容器内可写 `/app/share`（compose 已映射 `./share`） |
