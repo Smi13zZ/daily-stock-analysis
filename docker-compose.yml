@@ -1,0 +1,154 @@
+# ==============================================================================
+# daily_stock_analysis —— Docker Compose 部署文件（增强版 · 单文件源码构建版）
+# 项目地址: https://github.com/ZhuLinsen/daily_stock_analysis
+#
+# 放置位置：项目根目录（与 .env / docker/ 同级）
+# 启动命令：docker compose up -d
+#
+# 默认拓扑（推荐，单一调度入口）：
+#   server   : FastAPI + Web 工作台，内置调度器负责每日定时分析并推送
+#   analyzer : 独立 CLI 定时容器（profile: scheduler），仅在你想把
+#              「Web 服务」和「定时分析」拆成两个进程时才启用，
+#              启用前必须把 .env 里的 SCHEDULE_ENABLED 设为 false，
+#              否则会重复推送（详见同目录下的部署教程）。
+#
+# 本文件为「单文件版」：把原 docker-compose.override.yml 的本地源码构建
+# 配置合并进了 x-common 锚点，与双文件版本行为完全一致。
+# 回滚到双文件版本：从备份目录恢复 docker-compose.override.yml 即可。
+# ==============================================================================
+
+name: daily-stock-analysis
+
+# ------------------------------------------------------------------------------
+# 公共服务片段（YAML 锚点，server / analyzer 共用）
+# ------------------------------------------------------------------------------
+x-common: &common
+  # 当前模式：本地源码构建（单文件版）
+  # 改动 src/ 源码后重新构建并重建容器：
+  #   docker compose build && docker compose up -d --force-recreate
+  # 注意必须用独立本地 tag + pull_policy: never，否则 compose 的
+  # pull_policy: always 会在每次 up/run 把上游镜像拉回覆盖本地构建。
+  image: daily-stock-analysis-local:latest
+  pull_policy: never
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+
+  # 如需切回官方预构建镜像（免构建、秒级启动），把上面 3 行改成：
+  #   image: ${DSA_IMAGE:-ghcr.io/zhulinsen/daily_stock_analysis:latest}
+  #   pull_policy: always
+  #   # （并删除上面的 build: 段）
+  restart: unless-stopped
+
+  # 从项目根目录的 .env 读取全部配置
+  # 注意：不要把 .env 当成单文件 volume 挂进 /app/.env，
+  # Docker 挂载点会让「设置页保存配置」的 os.replace 原子更新失败。
+  env_file:
+    - .env
+
+  environment:
+    # 时区：决定 SCHEDULE_TIME 的换算基准，务必与你的预期一致
+    TZ: ${TZ:-Asia/Shanghai}
+    # 容器内必须监听 0.0.0.0，否则外网/宿主机访问不到
+    WEBUI_HOST: 0.0.0.0
+    WEBUI_PORT: ${API_PORT:-8000}
+    API_PORT: ${API_PORT:-8000}
+    # Python 日志即时落盘，方便 docker compose logs 查看
+    PYTHONUNBUFFERED: "1"
+
+    # 需要走代理访问 Gemini / OpenAI 时打开（宿主机代理请先监听 0.0.0.0）
+    # http_proxy: ${HTTP_PROXY:-}
+    # https_proxy: ${HTTPS_PROXY:-}
+    # no_proxy: localhost,127.0.0.1
+
+  volumes:
+    # 数据库（SQLite，含历史报告 / 任务记录 / 调度去重记录）
+    - ./data:/app/data
+    # 日志
+    - ./logs:/app/logs
+    # Markdown 分析报告
+    - ./reports:/app/reports
+    # 自定义策略文件（只读挂载，宿主机改完重启容器生效）
+    - ./strategies:/app/strategies:ro
+    # Longbridge OAuth token 缓存持久化（不用 Longbridge 可整行删除）
+    - ./longbridge_tokens:/home/dsa/.longbridge
+    # 分享产物自动导出目录（报告生成后自动落盘 PNG + 可阅读 HTML/Markdown）
+    - ./share:/app/share
+    # 需要覆盖前端静态资源时打开
+    # - ./static:/app/static:ro
+
+  # 允许容器通过 host.docker.internal 访问宿主机
+  # （宿主机上的 Futu OpenD、Ollama、代理端口都靠它）
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+  # 资源限制：完整分析（多股票 + 大盘复盘 + 选股 + 图片报告）建议 2G
+  # 只跑 Web/API 或单股轻量场景可降到 1G；512M 仅建议 MAX_WORKERS=1 的极简场景
+  deploy:
+    resources:
+      limits:
+        memory: ${MEM_LIMIT:-2G}
+      reservations:
+        memory: 512M
+
+  # 所有服务接入同一个自定义 bridge 网络（实际网络名就是 daily-stock-analysis）
+  # 好处：容器间可用服务名互访；与默认网络隔离，也方便后续接入 nginx / watchtower 等容器
+  networks:
+    - daily-stock-analysis
+
+services:
+  # ----------------------------------------------------------------------------
+  # Web 工作台 + FastAPI 服务（默认启动）
+  # 浏览器访问 http://<服务器IP>:8000
+  # ----------------------------------------------------------------------------
+  server:
+    <<: *common
+    container_name: stock-server
+    command:
+      [
+        "python", "main.py",
+        "--serve-only",
+        "--host", "0.0.0.0",
+        "--port", "${API_PORT:-8000}",
+      ]
+    ports:
+      # 只监听本机请改成 "127.0.0.1:8000:8000"，再用 Nginx/SSH 隧道暴露
+      - "${API_PORT:-8000}:${API_PORT:-8000}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://127.0.0.1:${API_PORT:-8000}/api/health || curl -fsS http://127.0.0.1:${API_PORT:-8000}/health || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+
+  # ----------------------------------------------------------------------------
+  # 独立定时分析容器（可选，默认不启动）
+  # 启用：docker compose --profile scheduler up -d
+  # 前提：.env 中 SCHEDULE_ENABLED=false（避免与 server 内置调度重复推送）
+  # ----------------------------------------------------------------------------
+  analyzer:
+    <<: *common
+    container_name: stock-analyzer
+    profiles:
+      - scheduler
+    command: ["python", "main.py", "--schedule"]
+
+# ------------------------------------------------------------------------------
+# 自定义 bridge 网络
+# name: 让 Docker 里的实际网络名就是 daily-stock-analysis
+#        （不加 name 的话 Compose 会拼成 daily-stock-analysis_daily-stock-analysis）
+# ------------------------------------------------------------------------------
+networks:
+  daily-stock-analysis:
+    name: daily-stock-analysis
+    driver: bridge
